@@ -2,6 +2,8 @@ import socket
 from threading import Thread, Lock
 from segment import Segment, HEADER_SIZE, TOTAL_SIZE, WINDOW_SIZE
 import time
+from packet import SegmentedPacket
+from hashlib import md5
 
 class UDPClient(Thread):
     def __init__(self, host, port):
@@ -37,7 +39,6 @@ class UDPClient(Thread):
                         self.send_ack()
                         if seg.seq == self.window_base:
                             while self.window_base in self.packets:
-                                print("Received segment: {}".format(self.window_base))
                                 self.received.append(self.packets[self.window_base])
                                 self.window_base += 1
                             try:
@@ -63,10 +64,26 @@ class UDPClient(Thread):
 if __name__ == "__main__":
     client = UDPClient("172.30.0.3", 5000)
     client.start()
+    packets = {}
     while True:
         for packet in client.receive():
-            print("Received packet with seq: {}, data: {}".format(packet.seq, packet.data.split()[0]))
-            time.sleep(1)
+            name, curr, end, total, data = SegmentedPacket.decode(packet.data)
+            if name not in packets:
+                packets[name] = []
+            packets[name].append(data.decode())
+            if len(packets[name]) == end + 1:
+                payload = "".join(packets[name])[:total]
+                print("Name {}".format(name))
+                md5sum = md5(payload.encode()).hexdigest()
+                with open(f"../objects/{name.decode()}.md5", "r") as f:
+                    md5sum2 = f.read().strip()
+                print(f"RESULT: {md5sum == md5sum2} MD5 sums: {md5sum} {md5sum2}")
+
+                
+
+
+
+            
         
                 
             

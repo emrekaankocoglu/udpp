@@ -3,6 +3,10 @@ from threading import Thread, Lock
 from segment import Segment, HEADER_SIZE, TOTAL_SIZE, WINDOW_SIZE
 import queue
 import time
+from packet import SegmentedPacket
+import glob
+import os
+from pathlib import Path
 
 ALPHA = 0.125
 
@@ -39,11 +43,11 @@ class UDPServer(Thread):
                 print("Possible fault: Received ack out of window")
                 continue
             else:
-                print("Received ack: {}".format(ack))
                 with self.lock:
                     self.packets[ack] = seg
-                    self.timeout = self.timeout * (1-ALPHA) + ALPHA * (time.perf_counter() - self.constructed[ack]) # dynamic timeout using rolling average
-                    print("Timeout: {}".format(self.timeout))
+                    self.timeout = (self.timeout * (1-ALPHA) + ALPHA * (time.perf_counter() - self.constructed[ack])) # dynamic timeout using rolling average
+                    if self.timeout > 10:
+                        self.timeout = 10
                     if ack == self.window_base:
                         self.window_base += 1
                         while self.window_base in self.packets:
@@ -58,14 +62,12 @@ class UDPServer(Thread):
             for i in range(self.window_base, self.window_base + self.window_size):
                 if i not in self.packets and i not in self.constructed: # TODO: may go with maximum seq number
                     data = self.data_queue.get()
-                    print("Sending segment: {}, data: {}".format(i, data))
                     seg = Segment(i, data)
                     self.constructed[i] = time.perf_counter()
                     self.send_queue.put(seg) #TODO: change this to add upcoming packets
     
     def timer(self, seq, segment):
         time.sleep(self.timeout)
-        print("failed to receive ack for seq: {}".format(seq))
         if seq not in self.packets:
             self.send_queue.put(segment)
         
@@ -77,7 +79,6 @@ class UDPServer(Thread):
             thread.start()
     
     def send(self, data):
-        print("Sending data: {}".format(data))
         self.data_queue.put(data)
 
     def run(self):
@@ -88,12 +89,42 @@ class UDPServer(Thread):
         queue_sender = Thread(target=self.queue_sender)
         queue_sender.start()
 
+def getfiles(dir):
+    small_files = glob.glob(os.path.join(dir, 'small*.obj'))
+    large_files = glob.glob(os.path.join(dir, 'large*.obj'))
+    return [f for f in small_files if os.path.isfile(f)], [f for f in large_files if os.path.isfile(f)]
+
+def construct_segments():
+    dir = '../objects'
+    small_files, large_files = getfiles(dir)
+    small_segments = []
+    for n in small_files:
+        with open(n, 'r') as f:
+            small_segments.extend(SegmentedPacket(Path(f.name).name, f.read()).construct())
+    large_segments = []
+    for n in large_files:
+        with open(n, 'r') as f:
+            large_segments.extend(SegmentedPacket(Path(f.name).name, f.read()).construct())
+    return small_segments, large_segments
+
+def interleave(small, large):
+    segments = []
+    for i in range(0, len(large)):
+        if len(small) > i:
+            segments.append(small[i])
+        segments.append(large[i])
+    return segments
+
+
 if __name__ == "__main__":
     server = UDPServer("172.30.0.3", 5000)
     server.start()
-    while True:
-        data = input("Enter data to send: ")
-        server.send(data)
+    small_segments, large_segments = construct_segments()
+    segments = interleave(small_segments, large_segments)
+    for seg in segments:
+        server.send(seg)
+
+
         
     
 
