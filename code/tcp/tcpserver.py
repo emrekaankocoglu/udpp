@@ -17,7 +17,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         with conn:
             print(f"Connected by {addr}")
             try:
-                sender = TCPSender(conn)
+                sender = TCPSender(conn) # create a sender thread for each client
                 sender.run()
             except Exception as e:
                 traceback.print_exc()

@@ -7,7 +7,7 @@ services:
     cap_add:
       - NET_ADMIN
     ports:
-      - "8000:8000"
+      - "8080:8000"
     volumes:
       - ./code:/app:rw
       - ./examples:/examples:rw

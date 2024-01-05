@@ -7,11 +7,15 @@ from traceback import print_exc
 from pathlib import Path
 
 class TCPSender(Thread):
+    """
+    TCP sender class that is responsible for constructing packets for the files and sending them to the socket
+    """
     def __init__(self, socket):
         super().__init__()
         self.socket = socket
 
     def getfiles(self,dir):
+        # get all files in the directory
         small_files = glob.glob(os.path.join(dir, 'small*.obj'))
         large_files = glob.glob(os.path.join(dir, 'large*.obj'))
         return [f for f in small_files if os.path.isfile(f)], [f for f in large_files if os.path.isfile(f)]
@@ -25,12 +29,12 @@ class TCPSender(Thread):
                     break
                 with open(small_files.pop(), 'r') as f:
                     data = f.read()
-                    packet = Packet(Path(f.name).name, data)
+                    packet = Packet(Path(f.name).name, data) # HTTP-like packet
                     self.socket.send(packet.encode().encode())
                     print(f"Sent {Path(f.name).name}")
                 with open(large_files.pop(), 'r') as f:
                     data = f.read()
-                    packet = Packet(Path(f.name).name, data)
+                    packet = Packet(Path(f.name).name, data) # HTTP-like packet
                     self.socket.send(packet.encode().encode())
             except BrokenPipeError as e:
                 self.socket.close()
